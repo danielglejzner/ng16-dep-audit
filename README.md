@@ -10,3 +10,8 @@ This library provides a simple CLI tool to check your Angular project's dependen
 - Checks each npm package in your project's `package.json`.
 - Identifies Angular packages that need to be upgraded/removed/replaced to be compatible with Angular 16 compiler.
 - Lists packages that do not have Angular dependencies or are not visible in the npm registry.
+
+## Usage ( work in progress )
+- For now you have ti put index.js file in the same dir as package.json file, and run it `node index.js`
+- You need semver isntalled `npm i semver`
+
