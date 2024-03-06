@@ -1,4 +1,4 @@
-# Angular 16 Dependency Upgrade Checker
+# Want to upgrade to Angular 16? Use this dependency Upgrade Checker!
 
 NGCC Has been removed in Angular 16.
 Your ViewEngine dependencies need to be upgraded/removed/replaced in order for your project to work with Angular 16+
@@ -8,11 +8,10 @@ This library provides a simple CLI tool to check your Angular project's dependen
 ## Features
 
 - Checks each npm package in your project's `package.json`.
-- Identifies Angular packages that need to be upgraded/removed/replaced to be compatible with Angular 16 compiler.
+- Identifies Angular packages that need to be upgraded or removed/replaced to be compatible with Angular 16 compiler.
 - Lists packages that do not have Angular dependencies or are not visible in the npm registry.
 
-## Usage ( work in progress )
-- `npm i ng16-dep-audit`
+## Usage
 - Make sure to run the command from a directory where you `package.json` is located
 - run `npx ng16-dep-audit`
 
