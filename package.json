@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "ng16-dep-audit": "ng16-dep-audit"
+    "ng16-dep-audit": "node ./index.js"
   },
   "repository": {
     "type": "git",
