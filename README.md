@@ -12,6 +12,7 @@ This library provides a simple CLI tool to check your Angular project's dependen
 - Lists packages that do not have Angular dependencies or are not visible in the npm registry.
 
 ## Usage ( work in progress )
-- For now you have to put index.js file in the same dir as package.json file, and run it `node index.js`
-- You need semver isntalled `npm i semver`
+- `npm i ng16-dep-audit`
+- Make sure to run the command from a directory where you `package.json` is located
+- run `npx ng16-dep-audit`
 
