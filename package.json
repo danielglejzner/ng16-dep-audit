@@ -1,10 +1,14 @@
 {
   "name": "ng16-dep-audit",
   "version": "1.0.0",
-  "description": "Audit your dependencies to see if you can upgrade to Angular 16. You can only do that if your dependencies support ivy engine. Since ngcc removal in Angular 16, view engine dependencies are no longer supported ",
+  "description": "Audit your dependencies to see if you can upgrade to Angular 16. You can only do that if your dependencies support ivy engine. Since ngcc removal in Angular 16, view engine dependencies are no longer supported",
   "main": "index.js",
+  "bin": {
+    "ng16-dep-audit": "./index.js"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "ng16-dep-audit": "ng16-dep-audit"
   },
   "repository": {
     "type": "git",
