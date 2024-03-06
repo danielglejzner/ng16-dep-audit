@@ -29,8 +29,16 @@ function httpGet(url) {
 }
 
 async function checkAngularCompatibility(packageName, dependenciesToCheck, totalPackages, currentVersion) {
-    const url = `https://registry.npmjs.org/${packageName}/latest`; 
+    const prefixesToUpgrade = ['@swimlane/ngx']; // Extendable list of package name prefixes
 
+    // Check if the packageName starts with any of the prefixes in prefixesToUpgrade
+    const shouldUpgrade = prefixesToUpgrade.some(prefix => packageName.startsWith(prefix));
+    if (shouldUpgrade) {
+        dependenciesToCheck.mayNeedUpgrade.push({ packageName, currentVersion, latestVersion: 'unknown' });
+        return;
+    }
+
+    const url = `https://registry.npmjs.org/${packageName}/latest`; 
     try {
         const packageInfo = await httpGet(url);
         const latestVersion = packageInfo.version;
@@ -45,27 +53,20 @@ async function checkAngularCompatibility(packageName, dependenciesToCheck, total
             ...packageInfo.peerDependencies,
         };
 
-        // Check if any of the combined dependencies include @angular/core
         const hasAngularCoreDependency = '@angular/core' in allDependencies;
 
         if (hasAngularCoreDependency) {
-            // Extract the version of @angular/core listed
             const angularCoreVersion = allDependencies['@angular/core'];
         
-            // Check if the specified version of @angular/core is less than or equal to 12.0.0
             if (angularCoreVersion && semver.lte(semver.minVersion(angularCoreVersion), '12.0.0')) {
-                // Package should be reviewed for removal since it doesn't support Ivy or is not up-to-date
                 dependenciesToCheck.reviewForRemoval.push({ packageName, currentVersion, latestVersion });
             } else {
-                // Package is up-to-date and may not need an upgrade
                 dependenciesToCheck.mayNeedUpgrade.push({ packageName, currentVersion, latestVersion });
             }
         } else {
-            // No @angular/core dependency found
             dependenciesToCheck.unknown.push(packageName);
         }
         
-
         process.stdout.write('\x1B[2J\x1B[0f');
         process.stdout.cursorTo(0);
         process.stdout.write(`Processing: [${'#'.repeat(dependenciesToCheck.processedPackages)}${'.'.repeat(totalPackages - dependenciesToCheck.processedPackages)}]`);
@@ -85,6 +86,8 @@ async function checkAngularCompatibility(packageName, dependenciesToCheck, total
         dependenciesToCheck.processedPackages++;
     }
 }
+
+
 
 
 async function getDependenciesAndCheckCompatibility() {
