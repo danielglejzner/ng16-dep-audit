@@ -29,25 +29,20 @@ function httpGet(url) {
 }
 
 async function checkAngularCompatibility(packageName, dependenciesToCheck, totalPackages, currentVersion) {
-    const url = `https://registry.npmjs.org/${packageName}`;
+    const url = `https://registry.npmjs.org/${packageName}/latest`; 
+
     try {
         const packageInfo = await httpGet(url);
+        const latestVersion = packageInfo.version;
 
-        // Get the latest and last published versions
-        const latestVersion = packageInfo['dist-tags'].latest;
-        const lastPublishedVersion = Object.keys(packageInfo.time).pop(); // Last key in the time object
-
-        // Display current, latest, and last published versions
         console.log(colorize(`${packageName}:`, 'yellow'));
         console.log(colorize(`Current version: ${currentVersion}`, 'green'));
         console.log(colorize(`Latest version: ${latestVersion}`, 'blue'));
-        console.log(colorize(`Last published version: ${lastPublishedVersion}`, 'red'));
 
-        // Combine dependencies and devDependencies
         const allDependencies = {
-            ...packageInfo.versions[latestVersion].dependencies,
-            ...packageInfo.versions[latestVersion].devDependencies,
-            ...packageInfo.versions[latestVersion].peerDependencies
+            ...packageInfo.dependencies,
+            ...packageInfo.devDependencies,
+            ...packageInfo.peerDependencies,
         };
 
         // Check if any of the combined dependencies include @angular/core
@@ -56,31 +51,33 @@ async function checkAngularCompatibility(packageName, dependenciesToCheck, total
         if (hasAngularCoreDependency) {
             // Extract the version of @angular/core listed
             const angularCoreVersion = allDependencies['@angular/core'];
-
-            // Check if the specified version of @angular/core is compatible with Angular 16
-            if (angularCoreVersion && semver.satisfies(semver.minVersion(angularCoreVersion), '>=12.0.0')) {
-                dependenciesToCheck.mayNeedUpgrade.push({ packageName, currentVersion, latestVersion });
-            } else {
+        
+            // Check if the specified version of @angular/core is less than or equal to 12.0.0
+            if (angularCoreVersion && semver.lte(semver.minVersion(angularCoreVersion), '12.0.0')) {
+                // Package should be reviewed for removal since it doesn't support Ivy or is not up-to-date
                 dependenciesToCheck.reviewForRemoval.push({ packageName, currentVersion, latestVersion });
+            } else {
+                // Package is up-to-date and may not need an upgrade
+                dependenciesToCheck.mayNeedUpgrade.push({ packageName, currentVersion, latestVersion });
             }
         } else {
             // No @angular/core dependency found
             dependenciesToCheck.unknown.push(packageName);
         }
-        process.stdout.write('\x1B[2J\x1B[0f');
+        
 
-        // Update progress bar
+        process.stdout.write('\x1B[2J\x1B[0f');
         process.stdout.cursorTo(0);
         process.stdout.write(`Processing: [${'#'.repeat(dependenciesToCheck.processedPackages)}${'.'.repeat(totalPackages - dependenciesToCheck.processedPackages)}]`);
 
-        // Output summary
         console.log(colorize('\nSummary:', 'yellow'));
         console.log(`Total dependencies checked: ${totalPackages}`);
         console.log(colorize(`May need upgrading: ${dependenciesToCheck.mayNeedUpgrade.length}`, 'green'));
         console.log(colorize(`Review for removal: ${dependenciesToCheck.reviewForRemoval.length}`, 'red'));
-        dependenciesToCheck.reviewForRemoval.forEach(({ packageName}) => {
+        dependenciesToCheck.reviewForRemoval.forEach(({ packageName }) => {
             console.log(colorize(`- ${packageName}`, 'red'));
-        });        console.log(colorize(`Unknown (no @angular/core dependency or dependencies visible in NPM registry): ${dependenciesToCheck.unknown.length}`, 'yellow'));
+        });
+        console.log(colorize(`Unknown (no @angular/core dependency or dependencies visible in NPM registry): ${dependenciesToCheck.unknown.length}`, 'yellow'));
 
     } catch (error) {
         console.error(colorize(`Could not fetch data for package: ${packageName}`, 'red'), error);
@@ -88,6 +85,7 @@ async function checkAngularCompatibility(packageName, dependenciesToCheck, total
         dependenciesToCheck.processedPackages++;
     }
 }
+
 
 async function getDependenciesAndCheckCompatibility() {
     const packageJsonPath = path.join(process.cwd(), 'package.json');
