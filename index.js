@@ -9,6 +9,7 @@ const os = require('os');
 const args = process.argv.slice(2);
 const helpArg = args.find(arg => arg === '-h' || arg === '--help');
 const versionArg = args.find(arg => arg === '-v' || arg === '--version');
+const skipAngular = args.find(arg => arg === '-ng' || arg === '--skip-ng');
 const outputArg = args.find(arg => arg.startsWith('--output='));
 const outputFile = outputArg ? outputArg.split('=')[1] : null;
 const styleArg = args.find(arg => arg.startsWith('--style='));
@@ -39,6 +40,7 @@ function displayHelp() {
   console.log(colorize('Options:', 'yellow', 'bold'));
   console.log(colorize('  -h, --help', 'green') + colorize('            Output usage information', 'reset'));
   console.log(colorize('  -v, --version', 'green') + colorize('         Output the version number', 'reset'));
+  console.log(colorize('  -ng, --skip-ng', 'green') + colorize('        Ignore angular packages in output', 'reset'));
   console.log(colorize('  --output=<file>', 'green') + colorize('       Specify the output file', 'reset'));
   console.log(colorize('  --style=<style>', 'green') + colorize('       Specify the output style (line, table, markdown)', 'reset') + '\n');
 
@@ -197,10 +199,18 @@ async function checkAngularCompatibility(
       dependenciesToCheck.unknown.push(packageName);
       return;
     }
+
     const latestVersion = packageInfo.version;
     console.log(colorize(`${packageName}:`, "yellow"));
     console.log(colorize(`Current version: ${currentVersion}`, "green"));
     console.log(colorize(`Latest version: ${latestVersion}`, "blue"));
+    if (packageName.startsWith('@angular/') && currentVersion !== latestVersion) {
+      dependenciesToCheck.mayNeedUpgrade.push({
+        packageName,
+        currentVersion,
+        latestVersion,
+      });
+    } else if (packageName.startsWith('@angular/')) { return; }
 
     const allDependencies = {
       ...packageInfo.dependencies,
@@ -258,7 +268,7 @@ async function getDependenciesAndCheckCompatibility() {
 
   updateProgressBar(dependenciesToCheck.processedPackages, totalPackages);
 
-  const promises = Object.keys(dependencies).map((packageName) =>
+  const promises = (skipAngular ? Object.keys(dependencies).filter(packageName => !packageName.startsWith('@angular/')) : Object.keys(dependencies) ).map((packageName) =>
     checkAngularCompatibility(
       packageName,
       dependenciesToCheck,
@@ -444,14 +454,6 @@ async function downloadAndExtractTgz(url, extractPath) {
       reject(err);
     });
   });
-}
-
-async function extractTar(tarPath, extractTo) {
-  const { stdout, stderr } = await execAsync(`tar -xf ${tarPath} -C ${extractTo}`);
-  if (stderr) {
-    throw new Error(`Error extracting TAR: ${stderr}`);
-  }
-  return stdout;
 }
 
 async function checkFileExists(extractTo, checkFileName) {
