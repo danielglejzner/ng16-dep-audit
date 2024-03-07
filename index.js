@@ -397,7 +397,7 @@ function printMarkdownOutput(dependenciesToCheck) {
     writeToOutput(`| Package | Current Version | Latest Version |`);
     writeToOutput(`| ------- | --------------- | -------------- |`);
     dependenciesToCheck.reviewForRemoval.forEach(dep => {
-      writeToOutput(`| ${dep.packageName} | ${dep.currentVersion} | ${dep.latestVersion} |`);
+      writeToOutput(`| [${dep.packageName}](https://npmjs.com/package/${dep.packageName}) | ${dep.currentVersion} | ${dep.latestVersion} |`);
     });
     writeToOutput('\n');
   }
@@ -405,7 +405,7 @@ function printMarkdownOutput(dependenciesToCheck) {
   if (dependenciesToCheck.unknown.length > 0) {
     writeToOutput(`### Dependencies without @angular/core or dependencies visible in NPM registry`);
     dependenciesToCheck.unknown.forEach(dep => {
-      writeToOutput(`- ${dep}`);
+      writeToOutput(`- [${dep}](https://npmjs.com/package/${dep})`);
     });
     writeToOutput('\n');
   }
