@@ -3,17 +3,66 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const semver = require("semver");
+const tar = require('tar');
+const os = require('os');
 
-function colorize(text, color) {
+const args = process.argv.slice(2);
+const helpArg = args.find(arg => arg === '-h' || arg === '--help');
+const versionArg = args.find(arg => arg === '-v' || arg === '--version');
+const outputArg = args.find(arg => arg.startsWith('--output='));
+const outputFile = outputArg ? outputArg.split('=')[1] : null;
+const styleArg = args.find(arg => arg.startsWith('--style='));
+const style = styleArg ? styleArg.split('=')[1] : 'line';
+
+if (helpArg) {
+  displayHelp();
+  process.exit();
+}
+
+if (versionArg) {
+  displayVersion();
+  process.exit();
+}
+
+
+function displayVersion() {
+  console.log('1.2.0');
+}
+
+function displayHelp() {
+  console.log(colorize('ng16-dep-audit', 'cyan', 'bold') + colorize(' - ', 'reset') + colorize('Audit your dependencies to see if you can upgrade to Angular 16. You can only do that if your dependencies support ivy engine. Since ngcc removal in Angular 16, view engine dependencies are no longer supported.', 'cyan', 'italic'));
+  console.log('\n'); // Adding a newline for better spacing
+
+  console.log(colorize('Usage:', 'yellow', 'bold'));
+  console.log(colorize('  npx ng16-dep-audit [options]', 'reset') + '\n');
+
+  console.log(colorize('Options:', 'yellow', 'bold'));
+  console.log(colorize('  -h, --help', 'green') + colorize('            Output usage information', 'reset'));
+  console.log(colorize('  -v, --version', 'green') + colorize('         Output the version number', 'reset'));
+  console.log(colorize('  --output=<file>', 'green') + colorize('       Specify the output file', 'reset'));
+  console.log(colorize('  --style=<style>', 'green') + colorize('       Specify the output style (line, table, markdown)', 'reset') + '\n');
+
+
+  console.log(colorize('Examples:', 'yellow', 'bold'));
+  console.log(colorize('  npx ng16-dep-audit --style=table', 'cyan'));
+  console.log(colorize('  npx ng16-dep-audit --output=output.md --style=markdown', 'cyan'));
+}
+
+
+function colorize(text, color, style = '') {
   const colors = {
     red: "\x1b[31m",
     green: "\x1b[32m",
     yellow: "\x1b[33m",
     blue: "\x1b[34m",
+    cyan: '\x1b[36m',
     reset: "\x1b[0m",
   };
-  return `${colors[color]}${text}${colors.reset}`;
+  const styles = {
+    bold: '\x1b[1m',
+    italic: '\x1b[3m',
+  };
+  return `${styles[style] || ''}${colors[color] || ''}${text}${colors.reset}`;
 }
 
 function delay(ms) {
@@ -80,31 +129,74 @@ function updateProgressBar(processedPackages, totalPackages) {
     `Processing: [${"#".repeat(processedPackages)}${".".repeat(totalPackages - processedPackages)}]`,
   );
 }
+function sanitizePackageName(packageName) {
+  return packageName.replace(/[@/]/g, '_'); // Replace @ and / with underscore
+}
 
+async function mkdtempSafe(prefix) {
+  // Ensure the prefix is sanitized to avoid path issues on Windows
+  const sanitizedPrefix = sanitizePackageName(prefix);
+  const tmpDirPath = path.join(os.tmpdir(), sanitizedPrefix);
+  return fs.promises.mkdtemp(tmpDirPath);
+}
+
+
+async function isViewEngine(packageJson) {
+  if (packageJson.metadata) {
+    return true;
+  }
+
+  const tmpDir = await mkdtempSafe(`npm-${packageJson.name}-`);
+
+  try {
+    await downloadAndExtractTgz(packageJson.dist.tarball, tmpDir);
+
+
+    const SUPPORTED_FORMAT_PROPERTIES = ['fesm2015', 'fesm5', 'es2015', 'esm2015', 'esm5', 'main', 'module', 'browser'];
+    let foundTypings = packageJson.typings || packageJson.types || null
+
+    if (foundTypings === null) {
+      for (const prop of SUPPORTED_FORMAT_PROPERTIES) {
+        const field = packageJson[prop];
+        if (typeof field !== 'string') {
+          continue;
+        }
+        const relativeTypingsPath = field.replace(/\.js$/, '.d.ts');
+        const typingsPath = path.resolve(tmpDir, relativeTypingsPath);
+        if (checkFileExists(tmpDir, checkFileName)) {
+          foundTypings = typingsPath;
+        }
+      }
+    }
+    if (!foundTypings) {
+      return false;
+    }
+
+    const metadataPath = path.resolve(tmpDir, foundTypings.replace(/\.d\.ts$/, '') + '.metadata.json');
+
+    const fileExists = await checkFileExists(tmpDir, metadataPath);
+    return fileExists;
+  } catch (error) {
+    console.error('An error occurred:', error);
+  } finally {
+    // Clean up: Delete the temporary directory and its contents
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  }
+  return false;
+}
 async function checkAngularCompatibility(
   packageName,
   dependenciesToCheck,
-  totalPackages,
   currentVersion,
 ) {
-  const prefixesToUpgrade = ["@swimlane/ngx"]; // Extendable list of package name prefixes
-
-  // Check if the packageName starts with any of the prefixes in prefixesToUpgrade
-  const shouldUpgrade = prefixesToUpgrade.some((prefix) =>
-    packageName.startsWith(prefix),
-  );
-  if (shouldUpgrade) {
-    dependenciesToCheck.mayNeedUpgrade.push({
-      packageName,
-      currentVersion,
-      latestVersion: "unknown",
-    });
-    return;
-  }
 
   const url = `https://registry.npmjs.org/${packageName}/latest`;
   try {
     const packageInfo = await httpGetWithRetry(url);
+    if (!packageInfo) {
+      dependenciesToCheck.unknown.push(packageName);
+      return;
+    }
     const latestVersion = packageInfo.version;
     console.log(colorize(`${packageName}:`, "yellow"));
     console.log(colorize(`Current version: ${currentVersion}`, "green"));
@@ -116,12 +208,10 @@ async function checkAngularCompatibility(
       ...packageInfo.peerDependencies,
     };
     const hasAngularCoreDependency = "@angular/core" in allDependencies;
-
     if (hasAngularCoreDependency) {
       const angularCoreVersion = allDependencies["@angular/core"];
       if (
-        angularCoreVersion &&
-        semver.lte(semver.minVersion(angularCoreVersion), "12.0.0")
+        angularCoreVersion && await isViewEngine(packageInfo)
       ) {
         dependenciesToCheck.reviewForRemoval.push({
           packageName,
@@ -172,7 +262,6 @@ async function getDependenciesAndCheckCompatibility() {
     checkAngularCompatibility(
       packageName,
       dependenciesToCheck,
-      totalPackages,
       dependencies[packageName],
     )
       .then(() => {
@@ -200,42 +289,174 @@ async function getDependenciesAndCheckCompatibility() {
   updateProgressBar(dependenciesToCheck.processedPackages, totalPackages);
   console.log("\n\n");
 
-  console.log(
-    colorize(
-      "\nDependencies without @angular/core or dependencies visible in NPM registry:",
-      "yellow",
-    ),
-  );
-  dependenciesToCheck.unknown.forEach((dep) =>
-    console.log(colorize(`- ${dep}`, "yellow")),
-  );
+  if (outputFile) {
+    fs.writeFileSync(outputFile, '', { encoding: 'utf8' });
+  } else {
+    console.log('\x1B[2J\x1B[0f');
+  }
 
-  console.log("\n\n");
+  // Depending on the style, print the output
+  switch (style) {
+    case 'line':
+      printLineOutput(dependenciesToCheck);
+      break;
+    case 'table':
+      printTableOutput(dependenciesToCheck);
+      break;
+    case 'markdown':
+      printMarkdownOutput(dependenciesToCheck);
+      break;
+    default:
+      writeToOutput('Unsupported style');
+      break;
+  }
+}
 
-  console.log(
-    colorize(
-      "Dependencies that are maintained but may need upgrading:",
-      "green",
-    ),
-  );
-  dependenciesToCheck.mayNeedUpgrade.forEach(
-    ({ packageName, currentVersion, latestVersion }) => {
-      console.log(
-        `- ${colorize(packageName, "green")}\n (current: ${colorize(currentVersion, "yellow")}, latest: ${colorize(latestVersion, "blue")})\n`,
-      );
-    },
-  );
+function calculateColumnWidths(rows) {
+  let maxWidths = { packageName: 'Package'.length, currentVersion: 'Current Version'.length, latestVersion: 'Latest Version'.length };
+  rows.forEach(row => {
+    maxWidths.packageName = Math.max(maxWidths.packageName, row.packageName.length);
+    maxWidths.currentVersion = Math.max(maxWidths.currentVersion, row.currentVersion.length);
+    maxWidths.latestVersion = Math.max(maxWidths.latestVersion, row.latestVersion.length);
+  });
+  return maxWidths;
+}
 
-  console.log(
-    colorize("\nDependencies to review for removal or replacement:", "red"),
-  );
-  dependenciesToCheck.reviewForRemoval.forEach(
-    ({ packageName, currentVersion, latestVersion }) => {
-      console.log(
-        `- ${colorize(packageName, "red")}\n (current: ${colorize(currentVersion, "yellow")}, latest: ${colorize(latestVersion, "blue")})\n`,
-      );
-    },
-  );
+function printTable(header, rows, headerColor) {
+  const widths = calculateColumnWidths(rows);
+  const headerLine = colorize(`| ${'Package'.padEnd(widths.packageName)} | ${'Current Version'.padEnd(widths.currentVersion)} | ${'Latest Version'.padEnd(widths.latestVersion)} |`, headerColor);
+
+  writeToOutput(colorize(header, headerColor));
+  writeToOutput(colorize('-'.repeat(headerLine.length), headerColor));
+  writeToOutput(headerLine);
+  writeToOutput(colorize('-'.repeat(headerLine.length), headerColor));
+
+  rows.forEach(({ packageName, currentVersion, latestVersion }) => {
+    writeToOutput(`| ${colorize(packageName.padEnd(widths.packageName), headerColor, 'bold')} | ${colorize(currentVersion.padEnd(widths.currentVersion), 'yellow', 'italic')} | ${colorize(latestVersion.padEnd(widths.latestVersion), 'blue', 'italic')} |`);
+  });
+
+  console.log(colorize('-'.repeat(headerLine.length), headerColor));
+  console.log();
+}
+
+function writeToOutput(content) {
+  if (outputFile) {
+    fs.appendFileSync(outputFile, content + '\n', { encoding: 'utf8' });
+  } else {
+    console.log(content);
+  }
+}
+
+function printLineOutput(dependenciesToCheck) {
+  writeToOutput(colorize('\nDependencies without @angular/core or dependencies visible in NPM registry:', 'yellow'));
+  dependenciesToCheck.unknown.forEach(dep => writeToOutput(colorize(`- ${dep}`, 'yellow')));
+
+  writeToOutput('\n\n');
+
+  writeToOutput(colorize('Dependencies that are maintained but may need upgrading:', 'green'));
+  dependenciesToCheck.mayNeedUpgrade.forEach(({ packageName, currentVersion, latestVersion }) => {
+    writeToOutput(`- ${colorize(packageName, 'green', 'bold')}\n (current: ${colorize(currentVersion, 'yellow', 'italic')}, latest: ${colorize(latestVersion, 'blue', 'italic')})\n`);
+  });
+
+  writeToOutput(colorize('\nDependencies to review for removal or replacement:', 'red'));
+  dependenciesToCheck.reviewForRemoval.forEach(({ packageName, currentVersion, latestVersion }) => {
+    writeToOutput(`- ${colorize(packageName, 'red', 'bold')}\n (current: ${colorize(currentVersion, 'yellow', 'italic')}, latest: ${colorize(latestVersion, 'blue', 'italic')})\n`);
+  });
+}
+
+function printTableOutput(dependenciesToCheck) {
+  if (dependenciesToCheck.unknown.length > 0) {
+    console.log(colorize('\nDependencies without @angular/core or dependencies visible in NPM registry:', 'yellow'));
+    dependenciesToCheck.unknown.forEach(dep => console.log(colorize(`- ${dep}`, 'yellow')));
+    console.log('\n\n');
+  }
+
+  if (dependenciesToCheck.mayNeedUpgrade.length > 0) {
+    printTable('Dependencies that are maintained but may need upgrading:', dependenciesToCheck.mayNeedUpgrade, 'green');
+    console.log('\n');
+  }
+
+  if (dependenciesToCheck.reviewForRemoval.length > 0) {
+    printTable('Dependencies to review for removal or replacement:', dependenciesToCheck.reviewForRemoval, 'red');
+  }
+}
+
+function printMarkdownOutput(dependenciesToCheck) {
+  if (dependenciesToCheck.mayNeedUpgrade.length > 0) {
+    writeToOutput(`### Dependencies that are maintained but may need upgrading`);
+    writeToOutput(`| Package | Current Version | Latest Version |`);
+    writeToOutput(`| ------- | --------------- | -------------- |`);
+    dependenciesToCheck.mayNeedUpgrade.forEach(dep => {
+      writeToOutput(`| [${dep.packageName}](https://npmjs.com/package/${dep.packageName}) | ${dep.currentVersion} | ${dep.latestVersion} |`);
+    });
+    writeToOutput('\n');
+  }
+
+  if (dependenciesToCheck.reviewForRemoval.length > 0) {
+    writeToOutput(`### Dependencies to review for removal or replacement`);
+    writeToOutput(`| Package | Current Version | Latest Version |`);
+    writeToOutput(`| ------- | --------------- | -------------- |`);
+    dependenciesToCheck.reviewForRemoval.forEach(dep => {
+      writeToOutput(`| [${dep.packageName}](https://npmjs.com/package/${dep.packageName}) | ${dep.currentVersion} | ${dep.latestVersion} |`);
+    });
+    writeToOutput('\n');
+  }
+
+  if (dependenciesToCheck.unknown.length > 0) {
+    writeToOutput(`### Dependencies without @angular/core or dependencies visible in NPM registry`);
+    dependenciesToCheck.unknown.forEach(dep => {
+      writeToOutput(`- [${dep}](https://npmjs.com/package/${dep})`);
+    });
+    writeToOutput('\n');
+  }
+}
+
+function ensureDirectoryExists(directory) {
+  if (!fs.existsSync(directory)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+}
+
+async function downloadAndExtractTgz(url, extractPath) {
+  ensureDirectoryExists(extractPath);
+  const tgzPath = path.join(extractPath, 'package.tgz');
+
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      const file = fs.createWriteStream(tgzPath);
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close(async () => {
+          try {
+            // Extract the .tgz file
+            await tar.extract({ file: tgzPath, cwd: extractPath });
+            resolve();
+          } catch (error) {
+            reject(error);
+          } finally {
+            // Clean up: Delete the downloaded .tgz file
+            fs.unlinkSync(tgzPath);
+          }
+        });
+      });
+    }).on('error', (err) => {
+      fs.unlinkSync(tgzPath); // Attempt to delete file on error
+      reject(err);
+    });
+  });
+}
+
+async function extractTar(tarPath, extractTo) {
+  const { stdout, stderr } = await execAsync(`tar -xf ${tarPath} -C ${extractTo}`);
+  if (stderr) {
+    throw new Error(`Error extracting TAR: ${stderr}`);
+  }
+  return stdout;
+}
+
+async function checkFileExists(extractTo, checkFileName) {
+  const files = await fs.promises.readdir(extractTo);
+  return files.includes(checkFileName);
 }
 
 getDependenciesAndCheckCompatibility();

@@ -13,5 +13,30 @@ This library provides a simple CLI tool to check your Angular project's dependen
 
 ## Usage
 - Make sure to run the command from a directory where you `package.json` is located
-- run `npx ng16-dep-audit`
 
+### Basic Command
+
+```bash
+npx ng16-dep-audit
+```
+
+### Command-Line Options
+
+- **`--style=<style>`**: Specifies the output style. Available styles are `line` (default), `table`, and `markdown`.
+- **`--output=<file>`**: Specifies the file to write the output to. If not provided, output will be displayed in the console.
+
+### Examples
+
+- Check dependencies and display results in a table format:
+
+  ```bash
+  npx ng16-dep-audit --style=table
+  ```
+
+- Check dependencies and save the results in markdown format to a file:
+
+  ```bash
+  npx ng16-dep-audit --output=dependency-report.md --style=markdown
+  ```
+
+For more information on usage and options, run `npx ng16-dep-audit --help`.
