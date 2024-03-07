@@ -31,6 +31,6 @@
   },
   "homepage": "https://github.com/danielglejzner/ng16-dep-audit#readme",
   "dependencies": {
-    "semver": "^7.6.0"
+    "tar": "^6.2.0"
   }
 }
