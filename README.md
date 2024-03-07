@@ -25,6 +25,7 @@ npx ng16-dep-audit
 - **`--style=<style>`**: Specifies the output style. Available styles are `line` (default), `table`, and `markdown`.
 - **`--output=<file>`**: Specifies the file to write the output to. If not provided, output will be displayed in the console.
 - **`--skip-ng (-ng)`**: This will skip over all angular internal packages
+- **`--package-boundary (-pb)`**: ensure @angular/core is included in library package.json.
 
 ### Examples
 

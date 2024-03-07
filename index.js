@@ -10,6 +10,7 @@ const args = process.argv.slice(2);
 const helpArg = args.find(arg => arg === '-h' || arg === '--help');
 const versionArg = args.find(arg => arg === '-v' || arg === '--version');
 const skipAngular = args.find(arg => arg === '-ng' || arg === '--skip-ng');
+const enforceAngularPackageBoundary = args.find(arg => arg === '-pb' || arg === '--package-boundary') || false;
 const outputArg = args.find(arg => arg.startsWith('--output='));
 const outputFile = outputArg ? outputArg.split('=')[1] : null;
 const styleArg = args.find(arg => arg.startsWith('--style='));
@@ -41,9 +42,9 @@ function displayHelp() {
   console.log(colorize('  -h, --help', 'green') + colorize('            Output usage information', 'reset'));
   console.log(colorize('  -v, --version', 'green') + colorize('         Output the version number', 'reset'));
   console.log(colorize('  -ng, --skip-ng', 'green') + colorize('        Ignore angular packages in output', 'reset'));
+  console.log(colorize('  -pb, --package-boundary', 'green') + colorize(' ensure @angular/core is included in library package.json', 'reset'));
   console.log(colorize('  --output=<file>', 'green') + colorize('       Specify the output file', 'reset'));
   console.log(colorize('  --style=<style>', 'green') + colorize('       Specify the output style (line, table, markdown)', 'reset') + '\n');
-
 
   console.log(colorize('Examples:', 'yellow', 'bold'));
   console.log(colorize('  npx ng16-dep-audit --style=table', 'cyan'));
@@ -218,10 +219,9 @@ async function checkAngularCompatibility(
       ...packageInfo.peerDependencies,
     };
     const hasAngularCoreDependency = "@angular/core" in allDependencies;
-    if (hasAngularCoreDependency) {
-      const angularCoreVersion = allDependencies["@angular/core"];
+    if ((enforceAngularPackageBoundary && hasAngularCoreDependency) || !enforceAngularPackageBoundary) {
       if (
-        angularCoreVersion && await isViewEngine(packageInfo)
+        await isViewEngine(packageInfo)
       ) {
         dependenciesToCheck.reviewForRemoval.push({
           packageName,
