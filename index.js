@@ -81,7 +81,6 @@ async function httpGetWithRetry(url, retries = 3, delayMs = 1000) {
             let data = "";
             if (resp.statusCode === 404) {
               resolve(null); // Ignore 404 errors and resolve as null
-              return;
             } else if (
               resp.statusCode === 429 ||
               resp.statusCode < 200 ||
@@ -166,7 +165,7 @@ async function isViewEngine(packageJson) {
         }
         const relativeTypingsPath = field.replace(/\.js$/, '.d.ts');
         const typingsPath = path.resolve(tmpDir, relativeTypingsPath);
-        if (checkFileExists(tmpDir, checkFileName)) {
+        if (await checkFileExists(tmpDir, typingsPath)) {
           foundTypings = typingsPath;
         }
       }
@@ -177,8 +176,7 @@ async function isViewEngine(packageJson) {
 
     const metadataPath = path.resolve(tmpDir, foundTypings.replace(/\.d\.ts$/, '') + '.metadata.json');
 
-    const fileExists = await checkFileExists(tmpDir, metadataPath);
-    return fileExists;
+    return await checkFileExists(tmpDir, metadataPath);
   } catch (error) {
     console.error('An error occurred:', error);
   } finally {
@@ -461,4 +459,10 @@ async function checkFileExists(extractTo, checkFileName) {
   return files.includes(checkFileName);
 }
 
-getDependenciesAndCheckCompatibility();
+/**
+ * @description
+ * it is possible to utilize top-level `await` since ES13/NodeJs-14.8.0
+ */
+(async function (){
+  await getDependenciesAndCheckCompatibility();
+})()
