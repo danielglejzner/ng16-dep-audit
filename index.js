@@ -464,4 +464,6 @@ async function checkFileExists(extractTo, checkFileName) {
  * @description
  * it is possible to utilize top-level `await` since ES13/NodeJs-14.8.0
  */
-await getDependenciesAndCheckCompatibility();
+(async function (){
+  await getDependenciesAndCheckCompatibility();
+})()
