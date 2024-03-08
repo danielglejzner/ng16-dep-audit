@@ -5,6 +5,7 @@ const path = require("path");
 const https = require("https");
 const tar = require('tar');
 const os = require('os');
+const packageJson = require('./package.json');
 
 const args = process.argv.slice(2);
 const helpArg = args.find(arg => arg === '-h' || arg === '--help');
@@ -28,7 +29,7 @@ if (versionArg) {
 
 
 function displayVersion() {
-  console.log('1.2.0');
+  console.log(packageJson.version);
 }
 
 function displayHelp() {
