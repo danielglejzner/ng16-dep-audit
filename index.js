@@ -15,7 +15,7 @@ const enforceAngularPackageBoundary = args.find(arg => arg === '-pb' || arg === 
 const outputArg = args.find(arg => arg.startsWith('--output='));
 const outputFile = outputArg ? outputArg.split('=')[1] : null;
 const styleArg = args.find(arg => arg.startsWith('--style='));
-const style = styleArg ? styleArg.split('=')[1] : 'line';
+const style = styleArg ? styleArg.split('=')[1] : 'table';
 
 if (helpArg) {
   displayHelp();
@@ -48,7 +48,7 @@ function displayHelp() {
   console.log(colorize('  --style=<style>', 'green') + colorize('       Specify the output style (line, table, markdown)', 'reset') + '\n');
 
   console.log(colorize('Examples:', 'yellow', 'bold'));
-  console.log(colorize('  npx ng16-dep-audit --style=table', 'cyan'));
+  console.log(colorize('  npx ng16-dep-audit --style=line', 'cyan'));
   console.log(colorize('  npx ng16-dep-audit --output=output.md --style=markdown', 'cyan'));
 }
 
